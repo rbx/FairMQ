@@ -225,6 +225,21 @@ auto lookup(std::vector<pdata>& pdata, const std::vector<info>& info = {}) -> vo
     }
 }
 
+auto get_nodes(const nspace ns) -> std::string
+{
+    char* res;
+    status rc;
+
+    rc = PMIx_Resolve_nodes(ns, &res);
+    if (rc != PMIX_SUCCESS) {
+        throw runtime_error("pmix::get_nodes failed: rc=" + rc);
+    }
+
+    std::string result(res);
+    free(res);
+    return result;
+}
+
 std::string get_info(const std::string& name, pmix::proc& process)
 {
     pmix_value_t* v;

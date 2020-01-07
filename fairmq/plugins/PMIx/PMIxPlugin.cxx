@@ -45,6 +45,8 @@ PMIxPlugin::PMIxPlugin(const string& name,
     LOG(debug) << PMIxClient() << "pmix::init() OK: " << fProcess << ", version=" << pmix::get_version();
     SetProperty<string>("id", fDeviceId);
 
+    // LOG(warn) << "NODES: " << pmix::get_nodes(fProcess.nspace);
+
     Fence("pmix::init");
     SubscribeForCommands();
     Fence("subscribed");
