@@ -44,6 +44,8 @@ std::string getIpFromHostname(const std::string& hostname);
 
 std::string getIpFromHostname(const std::string& hostname, boost::asio::io_service& ios);
 
+std::string getHostname();
+
 } /* namespace tools */
 } /* namespace mq */
 } /* namespace fair */

@@ -12,10 +12,15 @@
 #define _GNU_SOURCE // To get defns of NI_MAXSERV and NI_MAXHOST
 #endif
 
-#include <algorithm>
-#include <array>
 #include <boost/algorithm/string.hpp>   // trim
 #include <boost/asio.hpp>
+#include <boost/asio/ip/host_name.hpp>
+
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <exception>
 #include <fairlogger/Logger.h>
@@ -25,8 +30,6 @@
 #include <netdb.h>
 #include <stdexcept>
 #include <string>
-#include <sys/socket.h>
-#include <sys/types.h>
 
 using namespace std;
 
@@ -154,6 +157,11 @@ string getIpFromHostname(const string& hostname, boost::asio::io_service& ios)
         LOG(error) << "could not resolve hostname '" << hostname << "', reason: " << e.what();
         return "";
     }
+}
+
+string getHostname()
+{
+    return boost::asio::ip::host_name();
 }
 
 } /* namespace tools */
