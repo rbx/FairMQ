@@ -258,7 +258,7 @@ auto PMIxPlugin::Fence() -> void
 
 auto PMIxPlugin::Fence(const std::string& label) -> void
 {
-    Fence(label);
+    Fence();
     LOG(debug) << PMIxClient() << "pmix::fence() [" << label << "] OK";
 }
 
