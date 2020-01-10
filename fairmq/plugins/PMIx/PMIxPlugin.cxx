@@ -45,7 +45,12 @@ PMIxPlugin::PMIxPlugin(const string& name,
     LOG(debug) << PMIxClient() << "pmix::init() OK: " << fProcess << ", version=" << pmix::get_version();
     SetProperty<string>("id", fDeviceId);
 
-    // LOG(warn) << "NODES: " << pmix::get_nodes(fProcess.nspace);
+    LOG(warn) << "NODES: " << pmix::get_nodes(fProcess.nspace);
+    string hostname = tools::getHostname();
+    vector<pmix::proc> procs(pmix::get_peers(hostname, fProcess.nspace));
+    for (const auto& p : procs) {
+        LOG(warn) << "PEER (" << hostname << "): " << p;
+    }
 
     Fence("pmix::init");
     SubscribeForCommands();
@@ -142,22 +147,16 @@ auto PMIxPlugin::SubscribeForCommands() -> void
             LOG(info) << "Received command type: '" << cmd->GetType() << "' from " << sender;
             switch (cmd->GetType()) {
                 case Type::check_state:
-                    fCommands.Send(Cmds(make<CurrentState>(fDeviceId, GetCurrentDeviceState()))
-                                       .Serialize(Format::JSON),
-                                   {sender});
+                    fCommands.Send(Cmds(make<CurrentState>(fDeviceId, GetCurrentDeviceState())).Serialize(Format::JSON), {sender});
                     break;
                 case Type::change_state: {
                     Transition transition = static_cast<ChangeState&>(*cmd).GetTransition();
                     if (ChangeDeviceState(transition)) {
                         fCommands.Send(
-                            Cmds(make<TransitionStatus>(fDeviceId, Result::Ok, transition))
-                                .Serialize(Format::JSON),
-                            {sender});
+                            Cmds(make<TransitionStatus>(fDeviceId, Result::Ok, transition)).Serialize(Format::JSON), {sender});
                     } else {
                         fCommands.Send(
-                            Cmds(make<TransitionStatus>(fDeviceId, Result::Failure, transition))
-                                .Serialize(Format::JSON),
-                            {sender});
+                            Cmds(make<TransitionStatus>(fDeviceId, Result::Failure, transition)).Serialize(Format::JSON), {sender});
                     }
                     {
                         lock_guard<mutex> lock{fStateChangeSubscriberMutex};
@@ -171,8 +170,7 @@ auto PMIxPlugin::SubscribeForCommands() -> void
                         fStateChangeSubscribers.insert(sender.rank);
                     }
 
-                    LOG(debug) << "Publishing state-change: " << fLastState << "->" << fCurrentState
-                               << " to " << sender;
+                    LOG(debug) << "Publishing state-change: " << fLastState << "->" << fCurrentState << " to " << sender;
                     Cmds outCmds(make<StateChangeSubscription>(fDeviceId, Result::Ok),
                                  make<StateChange>(fDeviceId, 0, fLastState, fCurrentState));
                     fCommands.Send(outCmds.Serialize(Format::JSON), {sender});
@@ -183,9 +181,7 @@ auto PMIxPlugin::SubscribeForCommands() -> void
                         lock_guard<mutex> lock{fStateChangeSubscriberMutex};
                         fStateChangeSubscribers.erase(sender.rank);
                     }
-                    fCommands.Send(Cmds(make<StateChangeUnsubscription>(fDeviceId, Result::Ok))
-                                       .Serialize(Format::JSON),
-                                   {sender});
+                    fCommands.Send(Cmds(make<StateChangeUnsubscription>(fDeviceId, Result::Ok)).Serialize(Format::JSON), {sender});
                 }
                 break;
                 case Type::state_change_exiting_received: {
@@ -203,8 +199,7 @@ auto PMIxPlugin::SubscribeForCommands() -> void
                     for (const auto& k: GetPropertyKeys()) {
                         ss << fDeviceId << ": " << k << " -> " << GetPropertyAsString(k) << "\n";
                     }
-                    fCommands.Send(Cmds(make<Config>(fDeviceId, ss.str())).Serialize(Format::JSON),
-                                   {sender});
+                    fCommands.Send(Cmds(make<Config>(fDeviceId, ss.str())).Serialize(Format::JSON), {sender});
                 }
                 break;
                 default:
@@ -243,8 +238,7 @@ auto PMIxPlugin::Publish() -> void
 
     if (info.size() > 0) {
         pmix::publish(info);
-        LOG(debug) << PMIxClient() << "pmix::publish() OK: published " << info.size()
-                   << " binding channels.";
+        LOG(debug) << PMIxClient() << "pmix::publish() OK: published " << info.size() << " binding channels.";
     }
 }
 

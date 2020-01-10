@@ -240,6 +240,24 @@ auto get_nodes(const nspace ns) -> std::string
     return result;
 }
 
+auto get_peers(const std::string& hostname, const nspace ns) -> std::vector<proc>
+{
+    pmix_proc_t* peers;
+    size_t npeers = 0;
+    status rc;
+
+    // TODO: handle empty hostname, ns
+    rc = PMIx_Resolve_peers(hostname.c_str(), ns, &peers, &npeers);
+    if (rc != PMIX_SUCCESS) {
+        throw runtime_error("pmix::get_peers failed: rc=" + rc);
+    }
+
+    std::vector<proc> procs(static_cast<proc*>(peers), static_cast<proc*>(peers) + npeers);
+
+    PMIX_PROC_FREE(peers, npeers);
+    return procs;
+}
+
 std::string get_info(const std::string& name, pmix::proc& process)
 {
     pmix_value_t* v;
