@@ -16,13 +16,14 @@
 
 #include <boost/program_options.hpp>
 
+#include <termios.h> // raw mode console input
+
 #include <condition_variable>
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
 #include <string>
-#include <termios.h> // raw mode console input
 #include <thread>
 #include <utility>
 #include <unistd.h>
@@ -126,7 +127,7 @@ int main(int argc, char* argv[])
 
         fair::Logger::SetConsoleSeverity(fair::Severity::debug);
         fair::Logger::SetConsoleColor(true);
-        fair::Logger::SetVerbosity(fair::Verbosity::low);
+        fair::Logger::SetVerbosity(fair::Verbosity::veryhigh);
 
         pmix::proc process;
 
@@ -193,6 +194,45 @@ int main(int argc, char* argv[])
 
         pmix::fence({all});
         LOG(warn) << "pmix::fence() [subscribed] OK";
+
+
+
+        {
+            std::vector<pmix::app> apps;
+
+            // apps.emplace_back();
+            // apps.back().cmd = strdup("subl");
+            // apps.back().cwd = strdup("/home/orybalch/");
+            // pmix_argv_append_nosize(&(apps.back().argv), "subl");
+            // PMIX_INFO_CREATE(apps.back().info, 2);
+            // (void)strncpy(apps.back().info[0].key, "A1", PMIX_MAX_KEYLEN);
+            // apps.back().info[0].value.type = PMIX_INT8;
+            // apps.back().info[0].value.data.int8 = 12;
+            // (void)strncpy(apps.back().info[1].key, "B1", PMIX_MAX_KEYLEN);
+            // apps.back().info[1].value.type = PMIX_DOUBLE;
+            // apps.back().info[1].value.data.dval = 12.34;
+            // apps.back().ninfo = 2;
+            // apps.back().maxprocs = 1;
+
+            apps.emplace_back();
+            apps.back().cmd = strdup("google-chrome");
+            apps.back().cwd = strdup("/home/orybalch/");
+            pmix_argv_append_nosize(&(apps.back().argv), "google-chrome");
+            PMIX_INFO_CREATE(apps.back().info, 2);
+            (void)strncpy(apps.back().info[0].key, "A2", PMIX_MAX_KEYLEN);
+            apps.back().info[0].value.type = PMIX_INT8;
+            apps.back().info[0].value.data.int8 = 12;
+            (void)strncpy(apps.back().info[1].key, "B2", PMIX_MAX_KEYLEN);
+            apps.back().info[1].value.type = PMIX_DOUBLE;
+            apps.back().info[1].value.data.dval = 12.34;
+            apps.back().ninfo = 2;
+            apps.back().maxprocs = 1;
+
+            std::string result = pmix::spawn(apps);
+            LOG(info) << "spawned a new job to namespace '" << result << "'";
+        }
+
+
 
         StateSubscription stateSubscription(commands);
 

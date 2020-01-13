@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 // C++ PMIx v2.2 API
 namespace pmix
@@ -74,6 +75,36 @@ struct proc : pmix_proc_t
     }
 };
 
+struct app : pmix_app_t
+{
+    app() { PMIX_APP_CONSTRUCT(static_cast<pmix_app_t*>(this)); }
+    ~app() { PMIX_APP_DESTRUCT(static_cast<pmix_app_t*>(this)); }
+
+    app(const app& rhs)
+    {
+        PMIX_APP_CONSTRUCT(static_cast<pmix_app_t*>(this));
+        cmd = strdup(rhs.cmd);
+        PMIX_ARGV_COPY(argv, rhs.argv);
+        PMIX_ARGV_COPY(env, rhs.env);
+        cwd = strdup(rhs.cwd);
+        maxprocs = rhs.maxprocs;
+
+        ninfo = rhs.ninfo;
+        if (ninfo > 0) {
+            PMIX_APP_INFO_CREATE(static_cast<pmix_app_t*>(this), ninfo);
+            for (size_t i = 0; i < ninfo; ++i) {
+                PMIX_INFO_XFER(&(static_cast<pmix_app_t*>(this)->info[i]), &(rhs.info[i]));
+            }
+        }
+    }
+
+    friend std::ostream& operator<<(std::ostream& os, const app& a)
+    {
+        // TODO: output the remaining fields
+        return os << a.cmd;
+    }
+};
+
 struct value : pmix_value_t
 {
     value() { PMIX_VALUE_CONSTRUCT(static_cast<pmix_value_t*>(this)); }
@@ -86,7 +117,7 @@ struct value : pmix_value_t
         PMIX_VALUE_XFER(rc, lhs, static_cast<pmix_value_t*>(const_cast<value*>(&rhs)));
 
         if (rc != PMIX_SUCCESS) {
-            throw runtime_error("pmix::value copy ctor failed: rc=" + rc);
+            throw runtime_error("pmix::value copy ctor failed: rc=" + std::to_string(rc));
         }
     }
 
@@ -232,7 +263,7 @@ auto get_nodes(const nspace ns) -> std::string
 
     rc = PMIx_Resolve_nodes(ns, &res);
     if (rc != PMIX_SUCCESS) {
-        throw runtime_error("pmix::get_nodes failed: rc=" + rc);
+        throw runtime_error("pmix::get_nodes failed: rc=" + std::to_string(rc));
     }
 
     std::string result(res);
@@ -249,13 +280,25 @@ auto get_peers(const std::string& hostname, const nspace ns) -> std::vector<proc
     // TODO: handle empty hostname, ns
     rc = PMIx_Resolve_peers(hostname.c_str(), ns, &peers, &npeers);
     if (rc != PMIX_SUCCESS) {
-        throw runtime_error("pmix::get_peers failed: rc=" + rc);
+        throw runtime_error("pmix::get_peers failed: rc=" + std::to_string(rc));
     }
 
     std::vector<proc> procs(static_cast<proc*>(peers), static_cast<proc*>(peers) + npeers);
 
     PMIX_PROC_FREE(peers, npeers);
     return procs;
+}
+
+auto spawn(const std::vector<app>& apps) -> std::string
+{
+    status rc;
+    char ns[PMIX_MAX_NSLEN + 1];
+
+    if (PMIX_SUCCESS != (rc = PMIx_Spawn(nullptr, 0, apps.data(), apps.size(), ns))) {
+        throw runtime_error("pmix::spawn failed: rc=" + std::to_string(rc));
+    }
+
+    return {ns};
 }
 
 std::string get_info(const std::string& name, pmix::proc& process)
