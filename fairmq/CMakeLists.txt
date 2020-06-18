@@ -24,6 +24,7 @@ if(BUILD_FAIRMQ OR BUILD_SDK)
   set(target Tools)
 
   set(TOOLS_PUBLIC_HEADER_FILES
+    Errors.h
     tools/CppSTL.h
     tools/InstanceLimit.h
     tools/Network.h
@@ -276,6 +277,8 @@ if(BUILD_FAIRMQ)
   # preprocessor definitions #
   ############################
   target_compile_definitions(${_target} PUBLIC BOOST_ERROR_CODE_HEADER_ONLY)
+  target_compile_definitions(${_target} PUBLIC BOOST_INTERPROCESS_ENABLE_TIMEOUT_WHEN_LOCKING)
+  target_compile_definitions(${_target} PUBLIC BOOST_INTERPROCESS_TIMEOUT_WHEN_LOCKING_DURATION_MS=3000)
   if(BUILD_OFI_TRANSPORT)
     target_compile_definitions(${_target} PRIVATE BUILD_OFI_TRANSPORT)
   endif()

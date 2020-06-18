@@ -126,34 +126,38 @@ struct Region
         std::unique_ptr<RegionBlock[]> blocks = tools::make_unique<RegionBlock[]>(fAckBunchSize);
         size_t blocksToSend = 0;
 
-        while (true) {
-            blocksToSend = 0;
-            {
-                std::unique_lock<std::mutex> lock(fBlockMtx);
+        try {
+            while (true) {
+                blocksToSend = 0;
+                {
+                    std::unique_lock<std::mutex> lock(fBlockMtx);
 
-                // try to get <fAckBunchSize> blocks
-                if (fBlocksToFree.size() < fAckBunchSize) {
-                    fBlockSendCV.wait_for(lock, std::chrono::milliseconds(500));
+                    // try to get <fAckBunchSize> blocks
+                    if (fBlocksToFree.size() < fAckBunchSize) {
+                        fBlockSendCV.wait_for(lock, std::chrono::milliseconds(500));
+                    }
+
+                    // send whatever blocks we have
+                    blocksToSend = std::min(fBlocksToFree.size(), fAckBunchSize);
+
+                    copy_n(fBlocksToFree.end() - blocksToSend, blocksToSend, blocks.get());
+                    fBlocksToFree.resize(fBlocksToFree.size() - blocksToSend);
                 }
 
-                // send whatever blocks we have
-                blocksToSend = std::min(fBlocksToFree.size(), fAckBunchSize);
-
-                copy_n(fBlocksToFree.end() - blocksToSend, blocksToSend, blocks.get());
-                fBlocksToFree.resize(fBlocksToFree.size() - blocksToSend);
+                if (blocksToSend > 0) {
+                    while (!fQueue->try_send(blocks.get(), blocksToSend * sizeof(RegionBlock), 0) && !fStop) {
+                        // receiver slow? yield and try again...
+                        std::this_thread::yield();
+                    }
+                    // LOG(debug) << "Sent " << blocksToSend << " blocks.";
+                } else { // blocksToSend == 0
+                    if (fStop) {
+                        break;
+                    }
+                }
             }
-
-            if (blocksToSend > 0) {
-                while (!fQueue->try_send(blocks.get(), blocksToSend * sizeof(RegionBlock), 0) && !fStop) {
-                    // receiver slow? yield and try again...
-                    std::this_thread::yield();
-                }
-                // LOG(debug) << "Sent " << blocksToSend << " blocks.";
-            } else { // blocksToSend == 0
-                if (fStop) {
-                    break;
-                }
-            }
+        } catch (boost::interprocess::interprocess_exception& e) {
+            LOG(error) << "SendAcks failed: " << e.what();
         }
 
         LOG(debug) << "AcksSender for " << fName << " leaving " << "(blocks left to free: " << fBlocksToFree.size() << ", "
@@ -163,40 +167,44 @@ struct Region
     void StartReceivingAcks() { fAcksReceiver = std::thread(&Region::ReceiveAcks, this); }
     void ReceiveAcks()
     {
-        unsigned int priority;
-        boost::interprocess::message_queue::size_type recvdSize;
-        std::unique_ptr<RegionBlock[]> blocks = tools::make_unique<RegionBlock[]>(fAckBunchSize);
-        std::vector<fair::mq::RegionBlock> result;
-        result.reserve(fAckBunchSize);
+        try {
+            unsigned int priority;
+            boost::interprocess::message_queue::size_type recvdSize;
+            std::unique_ptr<RegionBlock[]> blocks = tools::make_unique<RegionBlock[]>(fAckBunchSize);
+            std::vector<fair::mq::RegionBlock> result;
+            result.reserve(fAckBunchSize);
 
-        while (true) {
-            uint32_t timeout = 100;
-            bool leave = false;
-            if (fStop) {
-                timeout = fLinger;
-                leave = true;
-            }
-            auto rcvTill = boost::posix_time::microsec_clock::universal_time() + boost::posix_time::milliseconds(timeout);
+            while (true) {
+                uint32_t timeout = 100;
+                bool leave = false;
+                if (fStop) {
+                    timeout = fLinger;
+                    leave = true;
+                }
+                auto rcvTill = boost::posix_time::microsec_clock::universal_time() + boost::posix_time::milliseconds(timeout);
 
-            while (fQueue->timed_receive(blocks.get(), fAckBunchSize * sizeof(RegionBlock), recvdSize, priority, rcvTill)) {
-                const auto numBlocks = recvdSize / sizeof(RegionBlock);
-                // LOG(debug) << "Received " << numBlocks << " blocks (recvdSize: " << recvdSize << "). (remaining queue size: " << fQueue->get_num_msg() << ").";
-                if (fBulkCallback) {
-                    result.clear();
-                    for (size_t i = 0; i < numBlocks; i++) {
-                        result.emplace_back(reinterpret_cast<char*>(fRegion.get_address()) + blocks[i].fHandle, blocks[i].fSize, reinterpret_cast<void*>(blocks[i].fHint));
-                    }
-                    fBulkCallback(result);
-                } else if (fCallback) {
-                    for (size_t i = 0; i < numBlocks; i++) {
-                        fCallback(reinterpret_cast<char*>(fRegion.get_address()) + blocks[i].fHandle, blocks[i].fSize, reinterpret_cast<void*>(blocks[i].fHint));
+                while (fQueue->timed_receive(blocks.get(), fAckBunchSize * sizeof(RegionBlock), recvdSize, priority, rcvTill)) {
+                    const auto numBlocks = recvdSize / sizeof(RegionBlock);
+                    // LOG(debug) << "Received " << numBlocks << " blocks (recvdSize: " << recvdSize << "). (remaining queue size: " << fQueue->get_num_msg() << ").";
+                    if (fBulkCallback) {
+                        result.clear();
+                        for (size_t i = 0; i < numBlocks; i++) {
+                            result.emplace_back(reinterpret_cast<char*>(fRegion.get_address()) + blocks[i].fHandle, blocks[i].fSize, reinterpret_cast<void*>(blocks[i].fHint));
+                        }
+                        fBulkCallback(result);
+                    } else if (fCallback) {
+                        for (size_t i = 0; i < numBlocks; i++) {
+                            fCallback(reinterpret_cast<char*>(fRegion.get_address()) + blocks[i].fHandle, blocks[i].fSize, reinterpret_cast<void*>(blocks[i].fHint));
+                        }
                     }
                 }
-            }
 
-            if (leave) {
-                break;
+                if (leave) {
+                    break;
+                }
             }
+        } catch (boost::interprocess::interprocess_exception& e) {
+            LOG(error) << "ReceiveAcks failed: " << e.what();
         }
 
         LOG(debug) << "AcksReceiver for " << fName << " leaving (remaining queue size: " << fQueue->get_num_msg() << ").";

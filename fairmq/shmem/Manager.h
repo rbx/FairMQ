@@ -20,6 +20,7 @@
 
 #include <FairMQLogger.h>
 #include <FairMQMessage.h>
+#include <fairmq/Errors.h>
 #include <fairmq/tools/CppSTL.h>
 #include <fairmq/tools/Strings.h>
 
@@ -51,6 +52,22 @@ namespace shmem
 
 struct SharedMemoryError : std::runtime_error { using std::runtime_error::runtime_error; };
 
+struct TimedScopedLock
+{
+    TimedScopedLock(boost::interprocess::named_mutex& mtx)
+        : duration(boost::posix_time::microsec_clock::universal_time() + boost::posix_time::milliseconds(BOOST_INTERPROCESS_TIMEOUT_WHEN_LOCKING_DURATION_MS))
+        , lock(mtx, duration)
+    {
+        if (!lock.owns()) {
+            LOG(error) << "fair::mq::shmem::TimedScopedLock timeout. Possible deadlock: owner died without unlocking?.";
+            throw TransportFactoryError("TimedScopedLock timeout. Possible deadlock: owner died without unlocking?.");
+        }
+    }
+
+    boost::posix_time::ptime duration;
+    boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock;
+};
+
 class Manager
 {
   public:
@@ -80,7 +97,7 @@ class Manager
         // store info about the managed segment as region with id 0
         fRegionInfos->emplace(0, RegionInfo("", 0, 0, fShmVoidAlloc));
 
-        boost::interprocess::scoped_lock<named_mutex> lock(fShmMtx);
+        TimedScopedLock lock(fShmMtx);
 
         fDeviceCounter = fManagementSegment.find<DeviceCounter>(unique_instance).first;
 
@@ -169,7 +186,7 @@ class Manager
 
             {
                 uint64_t id = 0;
-                boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
+                TimedScopedLock lock(fShmMtx);
 
                 RegionCounter* rc = fManagementSegment.find<RegionCounter>(unique_instance).first;
 
@@ -206,15 +223,14 @@ class Manager
             return result;
 
         } catch (interprocess_exception& e) {
-            LOG(error) << "cannot create region. Already created/not cleaned up?";
-            LOG(error) << e.what();
-            throw;
+            LOG(error) << "cannot create region. Already created/not cleaned up? " << e.what();
+            throw TransportFactoryError(tools::ToString("cannot create region. Already created/not cleaned up? ", e.what()));
         }
     }
 
     Region* GetRegion(const uint64_t id)
     {
-        boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
+        TimedScopedLock lock(fShmMtx);
         return GetRegionUnsafe(id);
     }
 
@@ -243,17 +259,25 @@ class Manager
 
     void RemoveRegion(const uint64_t id)
     {
-        fRegions.erase(id);
-        {
-            boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
-            fRegionInfos->at(id).fDestroyed = true;
+        try {
+            fRegions.erase(id);
+            {
+                TimedScopedLock lock(fShmMtx);
+                fRegionInfos->at(id).fDestroyed = true;
+            }
+            fRegionEventsCV.notify_all();
+        } catch (boost::interprocess::interprocess_exception& e) {
+            LOG(error) << "Could not remove region: " << e.what();
+            // throw TransportFactoryError(tools::ToString("Could not remove region: ", e.what()));
+        } catch (TransportFactoryError& e) {
+            LOG(error) << "Could not remove region: " << e.what();
+            // throw TransportFactoryError(tools::ToString("Could not remove region: ", e.what()));
         }
-        fRegionEventsCV.notify_all();
     }
 
     std::vector<fair::mq::RegionInfo> GetRegionInfo()
     {
-        boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
+        TimedScopedLock lock(fShmMtx);
         return GetRegionInfoUnsafe();
     }
 
@@ -293,57 +317,71 @@ class Manager
 
     void SubscribeToRegionEvents(RegionEventCallback callback)
     {
-        if (fRegionEventThread.joinable()) {
-            LOG(debug) << "Already subscribed. Overwriting previous subscription.";
-            boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
-            fRegionEventsSubscriptionActive = false;
-            lock.unlock();
-            fRegionEventsCV.notify_all();
-            fRegionEventThread.join();
+        try {
+            if (SubscribedToRegionEvents()) {
+                LOG(debug) << "Already subscribed. Overwriting previous subscription.";
+                UnsubscribeFromRegionEvents();
+            }
+            TimedScopedLock lock(fShmMtx);
+            fRegionEventCallback = callback;
+            fRegionEventsSubscriptionActive = true;
+            fRegionEventThread = std::thread(&Manager::RegionEventsSubscription, this);
+        } catch (boost::interprocess::interprocess_exception& e) {
+            LOG(error) << "Could not subscribe to region events: " << e.what();
+            throw TransportFactoryError(tools::ToString("Could not subscribe to region events: ", e.what()));
         }
-        boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
-        fRegionEventCallback = callback;
-        fRegionEventsSubscriptionActive = true;
-        fRegionEventThread = std::thread(&Manager::RegionEventsSubscription, this);
     }
 
-    bool SubscribedToRegionEvents() { return fRegionEventThread.joinable(); }
+    bool SubscribedToRegionEvents() const { return fRegionEventThread.joinable(); }
 
     void UnsubscribeFromRegionEvents()
     {
         if (fRegionEventThread.joinable()) {
-            boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
-            fRegionEventsSubscriptionActive = false;
-            lock.unlock();
-            fRegionEventsCV.notify_all();
-            fRegionEventThread.join();
-            lock.lock();
-            fRegionEventCallback = nullptr;
+            try {
+                TimedScopedLock lock(fShmMtx);
+                fRegionEventsSubscriptionActive = false;
+                lock.lock.unlock();
+                fRegionEventsCV.notify_all();
+                fRegionEventThread.join();
+                lock.lock.lock();
+                fRegionEventCallback = nullptr;
+            } catch (boost::interprocess::interprocess_exception& e) {
+                LOG(error) << "Could not unsubscribe from region events: " << e.what();
+                if (fRegionEventThread.joinable()) {
+                    fRegionEventThread.join();
+                }
+                // throw TransportFactoryError(tools::ToString("Could not unsubscribe from region events: ", e.what()));
+            }
         }
     }
 
     void RegionEventsSubscription()
     {
-        boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
-        while (fRegionEventsSubscriptionActive) {
-            auto infos = GetRegionInfoUnsafe();
-            for (const auto& i : infos) {
-                auto el = fObservedRegionEvents.find(i.id);
-                if (el == fObservedRegionEvents.end()) {
-                    fRegionEventCallback(i);
-                    fObservedRegionEvents.emplace(i.id, i.event);
-                } else {
-                    if (el->second == RegionEvent::created && i.event == RegionEvent::destroyed) {
+        try {
+            TimedScopedLock lock(fShmMtx);
+            while (fRegionEventsSubscriptionActive) {
+                auto infos = GetRegionInfoUnsafe();
+                for (const auto& i : infos) {
+                    auto el = fObservedRegionEvents.find(i.id);
+                    if (el == fObservedRegionEvents.end()) {
                         fRegionEventCallback(i);
-                        el->second = i.event;
+                        fObservedRegionEvents.emplace(i.id, i.event);
                     } else {
-                        // LOG(debug) << "ignoring event for id" << i.id << ":";
-                        // LOG(debug) << "incoming event: " << i.event;
-                        // LOG(debug) << "stored event: " << el->second;
+                        if (el->second == RegionEvent::created && i.event == RegionEvent::destroyed) {
+                            fRegionEventCallback(i);
+                            el->second = i.event;
+                        } else {
+                            // LOG(debug) << "ignoring event for id" << i.id << ":";
+                            // LOG(debug) << "incoming event: " << i.event;
+                            // LOG(debug) << "stored event: " << el->second;
+                        }
                     }
                 }
+                fRegionEventsCV.wait(lock.lock);
             }
-            fRegionEventsCV.wait(lock);
+        } catch (boost::interprocess::interprocess_exception& e) {
+            LOG(error) << "Region notification event failed: " << e.what();
+            // throw TransportFactoryError(tools::ToString("Region notification event failed: ", e.what()));
         }
     }
 
@@ -380,6 +418,7 @@ class Manager
                     LOG(debug) << "control queue timeout";
                 }
             } catch (boost::interprocess::interprocess_exception& ie) {
+                // LOG(debug) << "Heartbeats: ec: " << ie.get_error_code() << ", ne: " << ie.get_native_error() << ", what: " << ie.what();
                 fHeartbeatsCV.wait_for(lock, std::chrono::milliseconds(500), [&]() { return !fSendHeartbeats; });
                 // LOG(debug) << "no " << controlQueueName << " found";
             }
@@ -392,38 +431,49 @@ class Manager
     {
         using namespace boost::interprocess;
         bool lastRemoved = false;
-
-        UnsubscribeFromRegionEvents();
-
-        {
-            std::unique_lock<std::mutex> lock(fHeartbeatsMtx);
-            fSendHeartbeats = false;
-        }
-        fHeartbeatsCV.notify_one();
-        if (fHeartbeatThread.joinable()) {
-            fHeartbeatThread.join();
+        try {
+            UnsubscribeFromRegionEvents();
+        } catch(TransportFactoryError& e) {
         }
 
         try {
-            boost::interprocess::scoped_lock<named_mutex> lock(fShmMtx);
-
-            (fDeviceCounter->fCount)--;
-
-            if (fDeviceCounter->fCount == 0) {
-                LOG(debug) << "Last segment user, removing segment.";
-
-                RemoveSegments();
-                lastRemoved = true;
-            } else {
-                LOG(debug) << "Other segment users present (" << fDeviceCounter->fCount << "), skipping removal.";
+            {
+                std::unique_lock<std::mutex> lock(fHeartbeatsMtx);
+                fSendHeartbeats = false;
             }
-        } catch(interprocess_exception& e) {
-            LOG(error) << "Manager could not acquire lock: " << e.what();
+            fHeartbeatsCV.notify_one();
+            if (fHeartbeatThread.joinable()) {
+                fHeartbeatThread.join();
+            }
+        } catch(TransportFactoryError& e) {
+            if (fHeartbeatThread.joinable()) {
+                fHeartbeatThread.join();
+            }
         }
 
-        if (lastRemoved) {
-            named_mutex::remove(std::string("fmq_" + fShmId + "_mtx").c_str());
-            named_condition::remove(std::string("fmq_" + fShmId + "_cv").c_str());
+        try {
+            {
+                TimedScopedLock lock(fShmMtx);
+
+                (fDeviceCounter->fCount)--;
+
+                if (fDeviceCounter->fCount == 0) {
+                    LOG(debug) << "Last segment user, removing segment.";
+
+                    RemoveSegments();
+                    lastRemoved = true;
+                } else {
+                    LOG(debug) << "Other segment users present (" << fDeviceCounter->fCount << "), skipping removal.";
+                }
+            }
+            if (lastRemoved) {
+                named_mutex::remove(std::string("fmq_" + fShmId + "_mtx").c_str());
+                named_condition::remove(std::string("fmq_" + fShmId + "_cv").c_str());
+            }
+        } catch(interprocess_exception& e) {
+            LOG(error) << "Manager cleanup failed: " << e.what();
+        } catch(TransportFactoryError& e) {
+            LOG(error) << "Manager cleanup failed: " << e.what();
         }
     }
 

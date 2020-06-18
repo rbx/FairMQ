@@ -14,6 +14,7 @@
 #include <FairMQPoller.h>
 #include <FairMQSocket.h>
 #include <FairMQUnmanagedRegion.h>
+#include <fairmq/Errors.h>
 #include <fairmq/MemoryResources.h>
 #include <fairmq/Transports.h>
 
@@ -21,7 +22,6 @@
 #include <memory> // shared_ptr
 #include <vector>
 #include <unordered_map>
-#include <stdexcept>
 #include <cstddef> // size_t
 
 class FairMQChannel;
@@ -178,7 +178,6 @@ namespace mq
 {
 
 using TransportFactory = FairMQTransportFactory;
-struct TransportFactoryError : std::runtime_error { using std::runtime_error::runtime_error; };
 
 } /* namespace mq */
 } /* namespace fair */

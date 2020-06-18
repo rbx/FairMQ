@@ -232,6 +232,10 @@ class Message final : public fair::mq::Message
             LOG(error) << "error closing message: " << sme.what();
         } catch(boost::interprocess::lock_exception& le) {
             LOG(error) << "error closing message: " << le.what();
+        } catch(boost::interprocess::interprocess_exception& ie) {
+            LOG(error) << "error closing message: " << ie.what();
+        } catch(TransportFactoryError& tfe) {
+            LOG(error) << "error closing message: " << tfe.what();
         }
     }
 
