@@ -644,6 +644,62 @@ std::vector<std::pair<std::string, bool>> Monitor::CleanupFull(const SessionId& 
     return CleanupFull(shmId, verbose);
 }
 
+void Monitor::ResetContent(const ShmId& shmId, bool verbose /* = true */)
+{
+    if (verbose) {
+        cout << "Resetting segments content for shared memory id '" << shmId.shmId << "'..." << endl;
+    }
+
+    string managementSegmentName("fmq_" + shmId.shmId + "_mng");
+    try {
+        using namespace boost::interprocess;
+        managed_shared_memory managementSegment(open_only, managementSegmentName.c_str());
+
+        Uint16SegmentInfoHashMap* segmentInfos = managementSegment.find<Uint16SegmentInfoHashMap>(unique_instance).first;
+
+        for (const auto& s : *segmentInfos) {
+            if (verbose) {
+                cout << "Resetting content of segment '" << "fmq_" << shmId.shmId << "_m_" << s.first << "'..." << endl;
+            }
+            try {
+                if (s.second.fAllocationAlgorithm == AllocationAlgorithm::rbtree_best_fit) {
+                    RBTreeBestFitSegment segment(open_only, std::string("fmq_" + shmId.shmId + "_m_" + to_string(s.first)).c_str());
+                    void* ptr = segment.get_segment_manager();
+                    size_t size = segment.get_segment_manager()->get_size();
+                    new(ptr) segment_manager<char, rbtree_best_fit<mutex_family, offset_ptr<void>>, null_index>(size);
+                } else {
+                    SimpleSeqFitSegment segment(open_only, std::string("fmq_" + shmId.shmId + "_m_" + to_string(s.first)).c_str());
+                    void* ptr = segment.get_segment_manager();
+                    size_t size = segment.get_segment_manager()->get_size();
+                    new(ptr) segment_manager<char, simple_seq_fit<mutex_family, offset_ptr<void>>, null_index>(size);
+                }
+            } catch (bie& e) {
+                if (verbose) {
+                    cout << "Error resetting content of segment '" << std::string("fmq_" + shmId.shmId + "_m_" + to_string(s.first)) << "': " << e.what() << endl;
+                }
+            }
+        }
+    } catch (bie& e) {
+        if (verbose) {
+            cout << "Could not find '" << managementSegmentName << "' segment. Nothing to cleanup." << endl;
+            cout << e.what() << endl;
+        }
+    }
+
+    if (verbose) {
+        cout << "Done resetting segment content for shared memory id '" << shmId.shmId << "'." << endl;
+    }
+}
+
+void Monitor::ResetContent(const SessionId& sessionId, bool verbose /* = true */)
+{
+    ShmId shmId{makeShmIdStr(sessionId.sessionId)};
+    if (verbose) {
+        cout << "ResetContent called with session id '" << sessionId.sessionId << "', translating to shared memory id '" << shmId.shmId << "'" << endl;
+    }
+    ResetContent(shmId, verbose);
+}
+
 Monitor::~Monitor()
 {
     if (fSignalThread.joinable()) {

@@ -34,12 +34,14 @@ namespace fair::mq::shmem
 
 struct SharedMemoryError : std::runtime_error { using std::runtime_error::runtime_error; };
 
-using SimpleSeqFitSegment = boost::interprocess::basic_managed_shared_memory<char,
-    boost::interprocess::simple_seq_fit<boost::interprocess::mutex_family>,
+using SimpleSeqFitSegment = boost::interprocess::basic_managed_shared_memory<
+    char,
+    boost::interprocess::simple_seq_fit<boost::interprocess::mutex_family, boost::interprocess::offset_ptr<void>>,
     boost::interprocess::null_index>;
     // boost::interprocess::iset_index>;
-using RBTreeBestFitSegment = boost::interprocess::basic_managed_shared_memory<char,
-    boost::interprocess::rbtree_best_fit<boost::interprocess::mutex_family>,
+using RBTreeBestFitSegment = boost::interprocess::basic_managed_shared_memory<
+    char,
+    boost::interprocess::rbtree_best_fit<boost::interprocess::mutex_family, boost::interprocess::offset_ptr<void>>,
     boost::interprocess::null_index>;
     // boost::interprocess::iset_index>;
 
