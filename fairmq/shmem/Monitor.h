@@ -77,6 +77,15 @@ class Monitor
     /// @param verbose output cleanup results to stdout
     static std::vector<std::pair<std::string, bool>> CleanupFull(const SessionId& sessionId, bool verbose = true);
 
+    /// @brief [EXPERIMENTAL] cleanup the content of the shem segment, without recreating it
+    /// @param shmId shared memory id
+    /// Only call this when segment is not in use
+    static void ResetContent(const ShmId& shmId, bool verbose = true);
+    /// @brief [EXPERIMENTAL] cleanup the content of the shem segment, without recreating it
+    /// @param sessionId session id
+    /// Only call this when segment is not in use
+    static void ResetContent(const SessionId& sessionId, bool verbose = true);
+
     static void PrintDebugInfo(const ShmId& shmId);
     static void PrintDebugInfo(const SessionId& shmId);
     static std::unordered_map<uint16_t, std::vector<BufferDebugInfo>> GetDebugInfo(const ShmId& shmId);
