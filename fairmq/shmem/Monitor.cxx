@@ -369,12 +369,16 @@ void Monitor::PrintDebugInfo(const ShmId& shmId __attribute__((unused)))
         cout << endl << "found " << numMessages << " messages." << endl;
 
         for (const auto& s : *debug) {
+            string segmentName("fmq_" + shmId.shmId + "_m_" + to_string(s.first));
+            RBTreeBestFitSegment segment(bipc::open_only, segmentName.c_str());
+            // SimpleSeqFitSegment segment(bipc::open_only, segmentName.c_str());
             for (const auto& e : s.second) {
                 using time_point = chrono::system_clock::time_point;
                 time_point tmpt{chrono::duration_cast<time_point::duration>(chrono::nanoseconds(e.second.fCreationTime))};
                 time_t t = chrono::system_clock::to_time_t(tmpt);
                 uint64_t ms = e.second.fCreationTime % 1000000;
                 auto tm = localtime(&t);
+                void* ptr = segment.get_address_from_handle(e.first);
                 cout << "segment: " << setw(3) << setfill(' ') << s.first
                      << ", offset: " << setw(12) << setfill(' ') << e.first
                      << ", size: " << setw(10) << setfill(' ') << e.second.fSize
