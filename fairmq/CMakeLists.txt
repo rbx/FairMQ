@@ -384,6 +384,7 @@ if(BUILD_FAIRMQ)
     $<$<PLATFORM_ID:Linux>:rt>
     Boost::boost
     Boost::date_time
+    Boost::filesystem
     Boost::program_options
     FairLogger::FairLogger
     PicoSHA2
