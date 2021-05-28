@@ -22,6 +22,15 @@ struct Sampler : fair::mq::Device
         // Get the fText and fMaxIterations values from the command line options (via fConfig)
         fText = fConfig->GetProperty<std::string>("text");
         fMaxIterations = fConfig->GetProperty<uint64_t>("max-iterations");
+
+        fChannels.at("data1").at(0).Transport()->SubscribeToRegionEvents([](FairMQRegionInfo info) {
+            LOG(info) << "Region event: " << info.event << ": "
+                    << (info.managed ? "managed" : "unmanaged")
+                    << ", id: " << info.id
+                    << ", ptr: " << info.ptr
+                    << ", size: " << info.size
+                    << ", flags: " << info.flags;
+        });
     }
 
     bool ConditionalRun() override
@@ -30,7 +39,7 @@ struct Sampler : fair::mq::Device
         // but won't delete the data after the sending is completed.
         FairMQMessagePtr msg(NewStaticMessage(fText));
 
-        LOG(info) << "Sending \"" << fText << "\"";
+        // LOG(info) << "Sending \"" << fText << "\"";
 
         // in case of error or transfer interruption, return false to go to IDLE state
         // successfull transfer will return number of bytes transfered (can be 0 if sending an empty message).
@@ -41,7 +50,7 @@ struct Sampler : fair::mq::Device
             return false;
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // std::this_thread::sleep_for(std::chrono::seconds(1));
 
         return true;
     }

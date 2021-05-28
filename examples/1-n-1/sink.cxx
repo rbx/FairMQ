@@ -25,11 +25,20 @@ struct Sink : fair::mq::Device
     {
         // Get the fMaxIterations value from the command line options (via fConfig)
         fMaxIterations = fConfig->GetProperty<uint64_t>("max-iterations");
+
+        fChannels.at("data2").at(0).Transport()->SubscribeToRegionEvents([](FairMQRegionInfo info) {
+            LOG(info) << "Region event: " << info.event << ": "
+                    << (info.managed ? "managed" : "unmanaged")
+                    << ", id: " << info.id
+                    << ", ptr: " << info.ptr
+                    << ", size: " << info.size
+                    << ", flags: " << info.flags;
+        });
     }
 
     bool HandleData(FairMQMessagePtr& msg, int)
     {
-        LOG(info) << "Received: \"" << std::string(static_cast<char*>(msg->GetData()), msg->GetSize()) << "\"";
+        // LOG(info) << "Received: \"" << std::string(static_cast<char*>(msg->GetData()), msg->GetSize()) << "\"";
 
         if (fMaxIterations > 0 && ++fNumIterations >= fMaxIterations) {
             LOG(info) << "Configured maximum number of iterations reached. Leaving RUNNING state.";

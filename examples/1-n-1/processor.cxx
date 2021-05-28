@@ -20,9 +20,21 @@ struct Processor : fair::mq::Device
         OnData("data1", &Processor::HandleData);
     }
 
+    void InitTask() override
+    {
+        fChannels.at("data1").at(0).Transport()->SubscribeToRegionEvents([](FairMQRegionInfo info) {
+            LOG(info) << "Region event: " << info.event << ": "
+                    << (info.managed ? "managed" : "unmanaged")
+                    << ", id: " << info.id
+                    << ", ptr: " << info.ptr
+                    << ", size: " << info.size
+                    << ", flags: " << info.flags;
+        });
+    }
+
     bool HandleData(FairMQMessagePtr& msg, int)
     {
-        LOG(info) << "Received data, processing...";
+        // LOG(info) << "Received data, processing...";
 
         // Modify the received string
         std::string* text = new std::string(static_cast<char*>(msg->GetData()), msg->GetSize());

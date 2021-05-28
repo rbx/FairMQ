@@ -18,54 +18,61 @@ SAMPLER="fairmq-ex-1-n-1-sampler"
 SAMPLER+=" --id sampler1"
 SAMPLER+=" --transport $transport"
 SAMPLER+=" --verbosity veryhigh"
+SAMPLER+=" --severity debug"
 SAMPLER+=" --session $SESSION"
 SAMPLER+=" --control static --color false"
-SAMPLER+=" --max-iterations 2"
+# SAMPLER+=" --max-iterations 2"
 SAMPLER+=" --mq-config $ex2config"
 @CMAKE_CURRENT_BINARY_DIR@/$SAMPLER &
 SAMPLER_PID=$!
 
-PROCESSOR1="fairmq-ex-1-n-1-processor"
-PROCESSOR1+=" --id processor1"
-PROCESSOR1+=" --transport $transport"
-PROCESSOR1+=" --verbosity veryhigh"
-PROCESSOR1+=" --session $SESSION"
-PROCESSOR1+=" --control static --color false"
-PROCESSOR1+=" --mq-config $ex2config"
-PROCESSOR1+=" --config-key processor"
-@CMAKE_CURRENT_BINARY_DIR@/$PROCESSOR1 &
-PROCESSOR1_PID=$!
-
-PROCESSOR2="fairmq-ex-1-n-1-processor"
-PROCESSOR2+=" --id processor2"
-PROCESSOR2+=" --transport $transport"
-PROCESSOR2+=" --verbosity veryhigh"
-PROCESSOR2+=" --session $SESSION"
-PROCESSOR2+=" --control static --color false"
-PROCESSOR2+=" --mq-config $ex2config"
-PROCESSOR2+=" --config-key processor"
-@CMAKE_CURRENT_BINARY_DIR@/$PROCESSOR2 &
-PROCESSOR2_PID=$!
+i=0
+pids=()
+while [ $i -le 19 ]
+do
+    PROCESSOR="fairmq-ex-1-n-1-processor"
+    PROCESSOR+=" --id processor$i"
+    PROCESSOR+=" --transport $transport"
+    PROCESSOR+=" --verbosity veryhigh"
+    PROCESSOR+=" --severity debug"
+    PROCESSOR+=" --session $SESSION"
+    PROCESSOR+=" --control static --color false"
+    PROCESSOR+=" --mq-config $ex2config"
+    PROCESSOR+=" --config-key processor"
+    @CMAKE_CURRENT_BINARY_DIR@/$PROCESSOR &
+    pids+=($!)
+((i++))
+done
 
 SINK="fairmq-ex-1-n-1-sink"
 SINK+=" --id sink1"
 SINK+=" --transport $transport"
 SINK+=" --verbosity veryhigh"
+SINK+=" --severity debug"
 SINK+=" --session $SESSION"
 SINK+=" --control static --color false"
-SINK+=" --max-iterations 2"
+# SINK+=" --max-iterations 2"
 SINK+=" --mq-config $ex2config"
 @CMAKE_CURRENT_BINARY_DIR@/$SINK &
 SINK_PID=$!
 
-# wait for sampler and sink to finish
+sleep 5
+
+i=0
+while [ $i -le 19 ]
+do
+    sleep 1
+    echo "......................"
+    echo "killing processor$i..."
+    kill -SIGINT ${pids[$i]}
+    wait ${pids[$i]}
+    echo "killed processor$i   !"
+    echo "......................"
+((i++))
+done
+
+kill -SIGINT $SAMPLER_PID
+kill -SIGINT $SINK_PID
+
 wait $SAMPLER_PID
 wait $SINK_PID
-
-# stop processors
-kill -SIGINT $PROCESSOR1_PID
-kill -SIGINT $PROCESSOR2_PID
-
-# wait for everything to finish
-wait $PROCESSOR1_PID
-wait $PROCESSOR2_PID
