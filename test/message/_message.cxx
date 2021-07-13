@@ -155,6 +155,10 @@ void Alignment(const string& transport, const string& _address)
     FairMQMessagePtr msg2(push.NewMessage(25, fair::mq::Alignment{alignment}));
     msg2->Rebuild(50, fair::mq::Alignment{alignment2});
     ASSERT_EQ(reinterpret_cast<uintptr_t>(msg2->GetData()) % alignment2, 0);
+
+    FairMQMessagePtr msgCopy(push.NewMessage());
+    msgCopy->Copy(*msg2);
+    ASSERT_EQ(reinterpret_cast<uintptr_t>(msgCopy->GetData()) % alignment2, 0);
 }
 
 void EmptyMessage(const string& transport, const string& _address)
@@ -173,13 +177,39 @@ void EmptyMessage(const string& transport, const string& _address)
     FairMQChannel pull{"Pull", "pull", factory};
     pull.Connect(address);
 
-    FairMQMessagePtr outMsg(push.NewMessage());
-    ASSERT_EQ(outMsg->GetData(), nullptr);
-    ASSERT_EQ(push.Send(outMsg), 0);
+    {
+        FairMQMessagePtr outMsg(push.NewMessage());
+        ASSERT_EQ(outMsg->GetData(), nullptr);
+        ASSERT_EQ(push.Send(outMsg), 0);
 
-    FairMQMessagePtr inMsg(pull.NewMessage());
-    ASSERT_EQ(pull.Receive(inMsg), 0);
-    ASSERT_EQ(inMsg->GetData(), nullptr);
+        FairMQMessagePtr inMsg(pull.NewMessage());
+        ASSERT_EQ(pull.Receive(inMsg), 0);
+        ASSERT_EQ(inMsg->GetData(), nullptr);
+    }
+
+    {
+        FairMQMessagePtr outMsg(push.NewMessage(0));
+        ASSERT_EQ(outMsg->GetSize(), 0);
+
+        outMsg->Rebuild(100);
+        ASSERT_EQ(outMsg->GetSize(), 100);
+
+        outMsg->Rebuild(0);
+        ASSERT_EQ(outMsg->GetSize(), 0);
+
+        FairMQMessagePtr msgCopy(push.NewMessage());
+        msgCopy->Copy(*outMsg);
+        ASSERT_EQ(msgCopy->GetSize(), 0);
+        ASSERT_EQ(push.Send(outMsg), 0);
+        ASSERT_EQ(push.Send(msgCopy), 0);
+
+        FairMQMessagePtr inMsg(pull.NewMessage());
+        FairMQMessagePtr inMsg2(pull.NewMessage());
+        ASSERT_EQ(pull.Receive(inMsg), 0);
+        ASSERT_EQ(pull.Receive(inMsg2), 0);
+        ASSERT_EQ(inMsg->GetSize(), 0);
+        ASSERT_EQ(inMsg2->GetSize(), 0);
+    }
 }
 
 TEST(Resize, zeromq)
