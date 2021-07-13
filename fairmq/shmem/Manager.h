@@ -65,12 +65,12 @@ struct ShmPtr
         : realPtr(rPtr)
     {}
 
-    char* GetRealPtr()
+    char* RealPtr()
     {
         return realPtr;
     }
 
-    char* GetUserPtr()
+    char* UserPtr()
     {
         return realPtr + sizeof(uint16_t) + *(reinterpret_cast<uint16_t*>(realPtr));
     }
@@ -680,7 +680,7 @@ class Manager
                 (*fMsgDebug).emplace(fSegmentId, fShmVoidAlloc);
             }
             (*fMsgDebug).at(fSegmentId).emplace(
-                static_cast<size_t>(GetHandleFromAddress(ShmPtr(ptr).GetUserPtr(), fSegmentId)),
+                static_cast<size_t>(GetHandleFromAddress(ShmPtr(ptr).UserPtr(), fSegmentId)),
                 MsgDebug(getpid(), size, std::chrono::system_clock::now().time_since_epoch().count())
             );
 #endif

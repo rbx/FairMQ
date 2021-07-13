@@ -188,7 +188,7 @@ class Message final : public fair::mq::Message
                 if (fMeta.fSize > 0) {
                     fManager.GetSegment(fMeta.fSegmentId);
                     ShmPtr shmPtr(reinterpret_cast<char*>(fManager.GetAddressFromHandle(fMeta.fHandle, fMeta.fSegmentId)));
-                    fLocalPtr = shmPtr.GetUserPtr();
+                    fLocalPtr = shmPtr.UserPtr();
                 } else {
                     fLocalPtr = nullptr;
                 }
@@ -219,7 +219,7 @@ class Message final : public fair::mq::Message
             try {
                 try {
                     ShmPtr shmPtr(fManager.ShrinkInPlace(newSize, static_cast<char*>(fManager.GetAddressFromHandle(fMeta.fHandle, fMeta.fSegmentId)), fMeta.fSegmentId));
-                    fLocalPtr = shmPtr.GetUserPtr();
+                    fLocalPtr = shmPtr.UserPtr();
                     fMeta.fSize = newSize;
                     return true;
                 } catch (boost::interprocess::bad_alloc& e) {
@@ -228,12 +228,12 @@ class Message final : public fair::mq::Message
                     // unused size < 1000000 bytes: simply reset the size and keep the rest of the buffer until message destruction
                     if (fMeta.fSize - newSize >= 1000000) {
                         ShmPtr shmPtr = fManager.Allocate(newSize, fAlignment);
-                        if (shmPtr.GetRealPtr()) {
-                            char* userPtr = shmPtr.GetUserPtr();
+                        if (shmPtr.RealPtr()) {
+                            char* userPtr = shmPtr.UserPtr();
                             std::memcpy(userPtr, fLocalPtr, newSize);
                             fManager.Deallocate(fMeta.fHandle, fMeta.fSegmentId);
                             fLocalPtr = userPtr;
-                            fMeta.fHandle = fManager.GetHandleFromAddress(shmPtr.GetRealPtr(), fMeta.fSegmentId);
+                            fMeta.fHandle = fManager.GetHandleFromAddress(shmPtr.RealPtr(), fMeta.fSegmentId);
                         } else {
                             LOG(debug) << "could not set used size: " << e.what();
                             return false;
@@ -292,11 +292,11 @@ class Message final : public fair::mq::Message
     char* InitializeChunk(const size_t size, size_t alignment = 0)
     {
         ShmPtr shmPtr = fManager.Allocate(size, alignment);
-        if (shmPtr.GetRealPtr()) {
-            fMeta.fHandle = fManager.GetHandleFromAddress(shmPtr.GetRealPtr(), fMeta.fSegmentId);
+        if (shmPtr.RealPtr()) {
+            fMeta.fHandle = fManager.GetHandleFromAddress(shmPtr.RealPtr(), fMeta.fSegmentId);
             fMeta.fSize = size;
         }
-        fLocalPtr = shmPtr.GetUserPtr();
+        fLocalPtr = shmPtr.UserPtr();
         return fLocalPtr;
     }
 
