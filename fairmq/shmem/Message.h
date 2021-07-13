@@ -295,8 +295,8 @@ class Message final : public fair::mq::Message
         if (shmPtr.RealPtr()) {
             fMeta.fHandle = fManager.GetHandleFromAddress(shmPtr.RealPtr(), fMeta.fSegmentId);
             fMeta.fSize = size;
+            fLocalPtr = shmPtr.UserPtr();
         }
-        fLocalPtr = shmPtr.UserPtr();
         return fLocalPtr;
     }
 
