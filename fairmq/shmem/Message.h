@@ -254,13 +254,21 @@ class Message final : public fair::mq::Message
 
     Transport GetType() const override { return fair::mq::Transport::SHM; }
 
-    void Copy(const fair::mq::Message& msg) override
+    void Copy(const fair::mq::Message& other) override
     {
         if (fMeta.fHandle < 0) {
-            boost::interprocess::managed_shared_memory::handle_t otherHandle = static_cast<const Message&>(msg).fMeta.fHandle;
-            if (otherHandle) {
-                if (InitializeChunk(msg.GetSize())) {
-                    std::memcpy(GetData(), msg.GetData(), msg.GetSize());
+            const Message& otherMsg = static_cast<const Message&>(other);
+            if (otherMsg.fMeta.fHandle >= 0) {
+                if (fMeta.fRegionId == 0) {
+                    fMeta = otherMsg.fMeta;
+                    fManager.GetSegment(fMeta.fSegmentId);
+                    ShmPtr shmPtr(reinterpret_cast<char*>(fManager.GetAddressFromHandle(fMeta.fHandle, fMeta.fSegmentId)));
+                    shmPtr.IncrementRefCount();
+                } else {
+                    // for messages from unmanaged region do a full copy.
+                    if (InitializeChunk(other.GetSize())) {
+                        std::memcpy(GetData(), other.GetData(), other.GetSize());
+                    }
                 }
             } else {
                 LOG(error) << "copy fail: source message not initialized!";
@@ -291,6 +299,10 @@ class Message final : public fair::mq::Message
 
     char* InitializeChunk(const size_t size, size_t alignment = 0)
     {
+        if (size == 0) {
+            fMeta.fSize = 0;
+            return fLocalPtr;
+        }
         ShmPtr shmPtr = fManager.Allocate(size, alignment);
         if (shmPtr.RealPtr()) {
             fMeta.fHandle = fManager.GetHandleFromAddress(shmPtr.RealPtr(), fMeta.fSegmentId);
@@ -305,7 +317,14 @@ class Message final : public fair::mq::Message
         if (fMeta.fHandle >= 0 && !fQueued) {
             if (fMeta.fRegionId == 0) {
                 fManager.GetSegment(fMeta.fSegmentId);
-                fManager.Deallocate(fMeta.fHandle, fMeta.fSegmentId);
+                ShmPtr shmPtr(reinterpret_cast<char*>(fManager.GetAddressFromHandle(fMeta.fHandle, fMeta.fSegmentId)));
+                uint16_t refCount = shmPtr.DecrementRefCount();
+                if (refCount == 1) {
+                    LOG(info) << "RefCount is 1. Last reference. Deallocating buffer";
+                    fManager.Deallocate(fMeta.fHandle, fMeta.fSegmentId);
+                } else {
+                    LOG(info) << "RefCount is " << refCount << ". Not deallocating";
+                }
                 fMeta.fHandle = -1;
             } else {
                 if (!fRegionPtr) {

@@ -72,7 +72,21 @@ struct ShmPtr
 
     char* UserPtr()
     {
-        return realPtr + sizeof(uint16_t) + *(reinterpret_cast<uint16_t*>(realPtr));
+        if (realPtr) {
+            return realPtr + sizeof(uint16_t) + sizeof(std::atomic<uint16_t>) + *(reinterpret_cast<uint16_t*>(realPtr));
+        } else {
+            return nullptr;
+        }
+    }
+
+    uint16_t IncrementRefCount()
+    {
+        return reinterpret_cast<std::atomic<uint16_t>*>(realPtr + sizeof(uint16_t))->fetch_add(1);
+    }
+
+    uint16_t DecrementRefCount()
+    {
+        return reinterpret_cast<std::atomic<uint16_t>*>(realPtr + sizeof(uint16_t))->fetch_sub(1);
     }
 
     char* realPtr;
@@ -641,8 +655,8 @@ class Manager
         alignment = std::max(alignment, alignof(std::max_align_t));
 
         char* ptr = nullptr;
-        // [offset(uint16_t)][alignment][buffer]
-        size_t fullSize = sizeof(uint16_t) + alignment + size;
+        // [offset(uint16_t)][atomic<uint16_t>][alignment][buffer]
+        size_t fullSize = sizeof(uint16_t) + sizeof(std::atomic<uint16_t>) + alignment + size;
         // tools::RateLimiter rateLimiter(20);
 
         while (ptr == nullptr) {
@@ -658,8 +672,10 @@ class Manager
                 ptr = reinterpret_cast<char*>(boost::apply_visitor(SegmentAllocate{fullSize}, fSegments.at(fSegmentId)));
                 assert(reinterpret_cast<uintptr_t>(ptr) % 2 == 0);
                 uint16_t offset = 0;
-                offset = alignment - ((reinterpret_cast<uintptr_t>(ptr) + sizeof(uint16_t)) % alignment);
+                offset = alignment - ((reinterpret_cast<uintptr_t>(ptr) + sizeof(uint16_t) + sizeof(std::atomic<uint16_t>)) % alignment);
                 std::memcpy(ptr, &offset, sizeof(offset));
+
+                new(ptr + sizeof(uint16_t)) std::atomic<uint16_t>(1);
             } catch (boost::interprocess::bad_alloc& ba) {
                 // LOG(warn) << "Shared memory full...";
                 if (ThrowingOnBadAlloc()) {
