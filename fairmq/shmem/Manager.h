@@ -66,7 +66,6 @@ class Manager
         , fManagementSegment(boost::interprocess::open_or_create, std::string("fmq_" + fShmId + "_mng").c_str(), 6553600)
         , fShmVoidAlloc(fManagementSegment.get_segment_manager())
         , fShmMtx(boost::interprocess::open_or_create, std::string("fmq_" + fShmId + "_mtx").c_str())
-        , fRegionEventsShmCV(boost::interprocess::open_or_create, std::string("fmq_" + fShmId + "_cv").c_str())
         , fRegionEventsSubscriptionActive(false)
         , fNumObservedEvents(0)
         , fDeviceCounter(nullptr)
@@ -347,7 +346,6 @@ class Manager
                 (fEventCounter->fCount)++;
             }
             fRegionsGen += 1; // signal TL cache invalidation
-            fRegionEventsShmCV.notify_all();
 
             return result;
         } catch (interprocess_exception& e) {
@@ -420,7 +418,6 @@ class Manager
                 fRegions.erase(id);
                 (fEventCounter->fCount)++;
             }
-            fRegionEventsShmCV.notify_all();
         } catch(std::out_of_range& oor) {
             LOG(debug) << "RemoveRegion() could not locate region with id '" << id << "'";
         }
@@ -430,11 +427,7 @@ class Manager
     std::vector<fair::mq::RegionInfo> GetRegionInfo()
     {
         boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
-        return GetRegionInfoUnsafe();
-    }
 
-    std::vector<fair::mq::RegionInfo> GetRegionInfoUnsafe()
-    {
         std::vector<fair::mq::RegionInfo> result;
 
         for (const auto& e : *fShmRegions) {
@@ -449,7 +442,7 @@ class Manager
                     info.ptr = region->fRegion.get_address();
                     info.size = region->fRegion.get_size();
                 } else {
-                    throw std::runtime_error(tools::ToString("GetRegionInfoUnsafe() could not get region with id '", info.id, "'"));
+                    throw std::runtime_error(tools::ToString("GetRegionInfo() could not get region with id '", info.id, "'"));
                 }
             } else {
                 info.ptr = nullptr;
@@ -482,13 +475,13 @@ class Manager
     {
         if (fRegionEventThread.joinable()) {
             LOG(debug) << "Already subscribed. Overwriting previous subscription.";
-            boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
+            std::unique_lock<std::mutex> lock(fRegionEventsMtx);
             fRegionEventsSubscriptionActive = false;
             lock.unlock();
-            fRegionEventsShmCV.notify_all();
+            fRegionEventsCV.notify_one();
             fRegionEventThread.join();
         }
-        boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
+        std::lock_guard<std::mutex> lock(fRegionEventsMtx);
         fRegionEventCallback = callback;
         fRegionEventsSubscriptionActive = true;
         fRegionEventThread = std::thread(&Manager::RegionEventsSubscription, this);
@@ -499,10 +492,10 @@ class Manager
     void UnsubscribeFromRegionEvents()
     {
         if (fRegionEventThread.joinable()) {
-            boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
+            std::unique_lock<std::mutex> lock(fRegionEventsMtx);
             fRegionEventsSubscriptionActive = false;
             lock.unlock();
-            fRegionEventsShmCV.notify_all();
+            fRegionEventsCV.notify_one();
             fRegionEventThread.join();
             lock.lock();
             fRegionEventCallback = nullptr;
@@ -511,33 +504,36 @@ class Manager
 
     void RegionEventsSubscription()
     {
-        boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
+        std::unique_lock<std::mutex> lock(fRegionEventsMtx);
+
         while (fRegionEventsSubscriptionActive) {
-            auto infos = GetRegionInfoUnsafe();
-            for (const auto& i : infos) {
-                auto el = fObservedRegionEvents.find({i.id, i.managed});
-                if (el == fObservedRegionEvents.end()) { // if event id has not been observed
-                    fObservedRegionEvents.emplace(std::make_pair(i.id, i.managed), i.event);
-                    // if a region has been created and destroyed rapidly, we could see 'destroyed' without ever seeing 'created'
-                    // TODO: do we care to show 'created' events if we know region is already destroyed?
-                    if (i.event == RegionEvent::created) {
-                        fRegionEventCallback(i);
-                        ++fNumObservedEvents;
-                    } else {
-                        fNumObservedEvents += 2;
-                    }
-                } else { // if event id has been observed (expected - there are two events per id - created & destroyed)
-                    // fire a callback if we have observed 'created' event and incoming is 'destroyed'
-                    if (el->second == RegionEvent::created && i.event == RegionEvent::destroyed) {
-                        fRegionEventCallback(i);
-                        el->second = i.event;
-                        ++fNumObservedEvents;
-                    } else {
-                        // LOG(debug) << "ignoring event " << i.id << ": incoming: " << i.event << ", stored: " << el->second;
+            if (fNumObservedEvents != fEventCounter->fCount) {
+                auto infos = GetRegionInfo();
+                for (const auto& i : infos) {
+                    auto el = fObservedRegionEvents.find({i.id, i.managed});
+                    if (el == fObservedRegionEvents.end()) { // if event id has not been observed
+                        fObservedRegionEvents.emplace(std::make_pair(i.id, i.managed), i.event);
+                        // if a region has been created and destroyed rapidly, we could see 'destroyed' without ever seeing 'created'
+                        // TODO: do we care to show 'created' events if we know region is already destroyed?
+                        if (i.event == RegionEvent::created) {
+                            fRegionEventCallback(i);
+                            ++fNumObservedEvents;
+                        } else {
+                            fNumObservedEvents += 2;
+                        }
+                    } else { // if event id has been observed (expected - there are two events per id - created & destroyed)
+                        // fire a callback if we have observed 'created' event and incoming is 'destroyed'
+                        if (el->second == RegionEvent::created && i.event == RegionEvent::destroyed) {
+                            fRegionEventCallback(i);
+                            el->second = i.event;
+                            ++fNumObservedEvents;
+                        } else {
+                            // LOG(debug) << "ignoring event " << i.id << ": incoming: " << i.event << ", stored: " << el->second;
+                        }
                     }
                 }
             }
-            fRegionEventsShmCV.wait(lock, [&] { return !fRegionEventsSubscriptionActive || fNumObservedEvents != fEventCounter->fCount; });
+            fRegionEventsCV.wait_for(lock, std::chrono::milliseconds(50), [&] { return !fRegionEventsSubscriptionActive; });
         }
     }
 
@@ -732,7 +728,8 @@ class Manager
     VoidAlloc fShmVoidAlloc;
     boost::interprocess::named_mutex fShmMtx;
 
-    boost::interprocess::named_condition fRegionEventsShmCV;
+    std::mutex fRegionEventsMtx;
+    std::condition_variable fRegionEventsCV;
     std::thread fRegionEventThread;
     bool fRegionEventsSubscriptionActive;
     std::function<void(fair::mq::RegionInfo)> fRegionEventCallback;
