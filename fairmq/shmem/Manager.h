@@ -133,7 +133,7 @@ class Manager
         , fSegmentId(config ? config->GetProperty<uint16_t>("shm-segment-id", 0) : 0)
         , fDeviceId(std::move(deviceId))
         , fManagementSegment(boost::interprocess::open_or_create, std::string("fmq_" + fShmId + "_mng").c_str(), 6553600)
-        , fShmVoidAlloc(fManagementSegment.get_segment_manager())
+        , fShmManagementVoidAlloc(fManagementSegment.get_segment_manager())
         , fShmMtx(boost::interprocess::open_or_create, std::string("fmq_" + fShmId + "_mtx").c_str())
         , fRegionEventsShmCV(boost::interprocess::open_or_create, std::string("fmq_" + fShmId + "_cv").c_str())
         , fNumObservedEvents(0)
@@ -198,14 +198,14 @@ class Manager
             std::stringstream ss;
             boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
 
-            fShmSegments = fManagementSegment.find_or_construct<Uint16SegmentInfoHashMap>(unique_instance)(fShmVoidAlloc);
+            fShmSegments = fManagementSegment.find_or_construct<Uint16SegmentInfoHashMap>(unique_instance)(fShmManagementVoidAlloc);
 
             SessionInfo* sessionInfo = fManagementSegment.find<SessionInfo>(unique_instance).first;
             if (sessionInfo) {
                 LOG(debug) << "session info found, name: " << sessionInfo->fSessionName << ", creator id: " << sessionInfo->fCreatorId;
             } else {
                 LOG(debug) << "no session info found, creating and initializing";
-                sessionInfo = fManagementSegment.construct<SessionInfo>(unique_instance)(sessionName.c_str(), geteuid(), fShmVoidAlloc);
+                sessionInfo = fManagementSegment.construct<SessionInfo>(unique_instance)(sessionName.c_str(), geteuid(), fShmManagementVoidAlloc);
                 LOG(debug) << "initialized session info, name: " << sessionInfo->fSessionName << ", creator id: " << sessionInfo->fCreatorId;
             }
 
@@ -218,7 +218,7 @@ class Manager
                 LOG(debug) << "initialized event counter with: " << fEventCounter->fCount;
             }
 
-            fShmRegions = fManagementSegment.find_or_construct<Uint16RegionInfoHashMap>(unique_instance)(fShmVoidAlloc);
+            fShmRegions = fManagementSegment.find_or_construct<Uint16RegionInfoHashMap>(unique_instance)(fShmManagementVoidAlloc);
 
             fDeviceCounter = fManagementSegment.find<DeviceCounter>(unique_instance).first;
             if (fDeviceCounter) {
@@ -289,8 +289,8 @@ class Manager
             }
 
 #ifdef FAIRMQ_DEBUG_MODE
-            fMsgDebug = fManagementSegment.find_or_construct<Uint16MsgDebugMapHashMap>(unique_instance)(fShmVoidAlloc);
-            fShmMsgCounters = fManagementSegment.find_or_construct<Uint16MsgCounterHashMap>(unique_instance)(fShmVoidAlloc);
+            fMsgDebug = fManagementSegment.find_or_construct<Uint16MsgDebugMapHashMap>(unique_instance)(fShmManagementVoidAlloc);
+            fShmMsgCounters = fManagementSegment.find_or_construct<Uint16MsgCounterHashMap>(unique_instance)(fShmManagementVoidAlloc);
 #endif
         } catch (...) {
             StopHeartbeats();
@@ -421,7 +421,7 @@ class Manager
                     LOG(debug) << "Successfully zeroed free memory of region " << id << ".";
                 }
 
-                fShmRegions->emplace(id, RegionInfo(path.c_str(), flags, userFlags, fShmVoidAlloc));
+                fShmRegions->emplace(id, RegionInfo(path.c_str(), flags, userFlags, fShmManagementVoidAlloc));
 
                 r.first->second->StartReceivingAcks();
                 result.first = &(r.first->second->fRegion);
@@ -732,7 +732,7 @@ class Manager
             boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(fShmMtx);
             IncrementShmMsgCounter(fSegmentId);
             if (fMsgDebug->count(fSegmentId) == 0) {
-                fMsgDebug->emplace(fSegmentId, fShmVoidAlloc);
+                fMsgDebug->emplace(fSegmentId, fShmManagementVoidAlloc);
             }
             fMsgDebug->at(fSegmentId).emplace(
                 static_cast<size_t>(GetHandleFromAddress(ShmHeader::UserPtr(ptr), fSegmentId)),
@@ -809,7 +809,7 @@ class Manager
     std::string fDeviceId;
     std::unordered_map<uint16_t, boost::variant<RBTreeBestFitSegment, SimpleSeqFitSegment>> fSegments;
     boost::interprocess::managed_shared_memory fManagementSegment;
-    VoidAlloc fShmVoidAlloc;
+    VoidAlloc fShmManagementVoidAlloc;
     boost::interprocess::named_mutex fShmMtx;
 
     boost::interprocess::named_condition fRegionEventsShmCV;
