@@ -177,7 +177,6 @@ bool Monitor::PrintShm(const ShmId& shmId)
 
     try {
         managed_shared_memory managementSegment(open_read_only, std::string("fmq_" + shmId.shmId + "_mng").c_str());
-        VoidAlloc allocInstance(managementSegment.get_segment_manager());
 
         Uint16SegmentInfoHashMap* segmentInfos = managementSegment.find<Uint16SegmentInfoHashMap>(unique_instance).first;
         std::unordered_map<uint16_t, boost::variant<RBTreeBestFitSegment, SimpleSeqFitSegment>> segments;
