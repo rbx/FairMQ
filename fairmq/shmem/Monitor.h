@@ -106,12 +106,6 @@ class Monitor
     static bool PrintShm(const ShmId& shmId);
     static void ListAll(const std::string& path);
 
-    static bool RemoveObject(const std::string& name);
-    static bool RemoveFileMapping(const std::string& name);
-    static bool RemoveQueue(const std::string& name);
-    static bool RemoveMutex(const std::string& name);
-    static bool RemoveCondition(const std::string& name);
-
     struct DaemonPresent : std::runtime_error { using std::runtime_error::runtime_error; };
     struct MonitorError : std::runtime_error { using std::runtime_error::runtime_error; };
 
@@ -122,6 +116,18 @@ class Monitor
     void CheckSegment();
     void Interactive();
     void SignalMonitor();
+
+    template<typename Object>
+    static std::pair<std::string, bool> Remove(std::string name, bool verbose)
+    {
+        if (Object::remove(name.c_str())) {
+            LOG_IF(info, verbose) << "Successfully removed '" << name << "'.";
+            return {name, true};
+        } else {
+            LOG_IF(debug, verbose) << "Did not remove '" << name << "'. Already removed?";
+            return {name, false};
+        }
+    }
 
     bool fSelfDestruct; // will self-destruct after the memory has been closed
     bool fInteractive; // running in interactive mode
