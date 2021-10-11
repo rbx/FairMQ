@@ -36,10 +36,20 @@ auto AsStringView(Message const& msg) -> string_view
     return {static_cast<char const*>(msg.GetData()), msg.GetSize()};
 }
 
+void DoIt(Channel& ch)
+{
+    size_t size{1024*1024};
+    for (size_t i = size; i > 0; i--) {
+        auto msg(ch.NewMessage(size));
+        ASSERT_TRUE(msg->SetUsedSize(i));
+    }
+}
+
 auto RunPushPullWithMsgResize(string const & transport, string const & _address) -> void
 {
     ProgOptions config;
     config.SetProperty<string>("session", tools::Uuid());
+    // config.SetProperty<string>("shm-allocation", "simple_seq_fit");
     auto factory(TransportFactory::CreateTransportFactory(transport, tools::Uuid(), &config));
 
     Channel push{"Push", "push", factory};
@@ -95,6 +105,26 @@ auto RunPushPullWithMsgResize(string const & transport, string const & _address)
         ASSERT_EQ(pull.Receive(inMsg), 0);
         ASSERT_EQ(inMsg->GetSize(), 0);
     }
+
+    LOG(info) << "'''''''''''''''''''''''''''''''''";
+
+    // std::thread t1(DoIt, std::ref(push));
+    // std::thread t2(DoIt, std::ref(push));
+    // std::thread t3(DoIt, std::ref(push));
+    // std::thread t4(DoIt, std::ref(push));
+    // std::thread t5(DoIt, std::ref(push));
+
+    size_t size{1024*1024};
+    for (size_t i = size; i > 0; i--) {
+        auto msg(push.NewMessage(size));
+        ASSERT_TRUE(msg->SetUsedSize(i));
+    }
+
+    // t1.join();
+    // t2.join();
+    // t3.join();
+    // t4.join();
+    // t5.join();
 }
 
 auto RunMsgRebuild(const string& transport) -> void

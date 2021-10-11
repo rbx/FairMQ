@@ -8,6 +8,8 @@
 #ifndef FAIR_MQ_SHMEM_COMMON_H_
 #define FAIR_MQ_SHMEM_COMMON_H_
 
+#include <fairlogger/Logger.h>
+
 #include <picosha2.h>
 
 #include <atomic>
@@ -314,7 +316,9 @@ struct SegmentBufferShrink : public boost::static_visitor<char*>
     char* operator()(S& s) const
     {
         boost::interprocess::managed_shared_memory::size_type shrunk_size = new_size;
-        return s.template allocation_command<char>(boost::interprocess::shrink_in_place, new_size + 128, shrunk_size, local_ptr);
+        auto ret = s.template allocation_command<char>(boost::interprocess::shrink_in_place, new_size + 1024, shrunk_size, local_ptr);
+        // LOG(info) << "Asked to shrink to " << new_size << ", managed to shrink to " << shrunk_size;
+        return ret;
     }
 
     const size_t new_size;

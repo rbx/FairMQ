@@ -226,6 +226,7 @@ class Message final : public fair::mq::Message
                     fMeta.fSize = newSize;
                     return true;
                 } catch (boost::interprocess::bad_alloc& e) {
+                    LOG(info) << "bad_alloc with currentSize = " << fMeta.fSize << ", newSize = " << newSize << ", difference: " << fMeta.fSize - newSize;
                     // if shrinking fails (can happen due to boost alignment requirements):
                     // unused size >= 1000000 bytes: reallocate fully
                     // unused size < 1000000 bytes: simply reset the size and keep the rest of the buffer until message destruction

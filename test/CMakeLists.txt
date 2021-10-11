@@ -93,7 +93,7 @@ add_testsuite(Message
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}
              ${CMAKE_CURRENT_SOURCE_DIR}/message
              ${CMAKE_CURRENT_BINARY_DIR}
-    TIMEOUT 5
+    TIMEOUT 50
     ${definitions}
 )
 
