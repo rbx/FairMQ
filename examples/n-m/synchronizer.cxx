@@ -19,11 +19,11 @@ struct Synchronizer : fair::mq::Device
 {
     bool ConditionalRun() override
     {
-        FairMQMessagePtr msg(NewSimpleMessage(fTimeframeId));
+        FairMQMessagePtr msg(NewSimpleMessage(fBufferId));
 
         if (Send(msg, "sync") > 0) {
-            if (++fTimeframeId == UINT16_MAX - 1) {
-                fTimeframeId = 0;
+            if (++fBufferId == UINT64_MAX - 1) {
+                fBufferId = 0;
             }
         } else {
             return false;
@@ -33,7 +33,7 @@ struct Synchronizer : fair::mq::Device
     }
 
   private:
-    uint16_t fTimeframeId = 0;
+    uint64_t fBufferId = 0;
 };
 
 void addCustomOptions(bpo::options_description& /* options */) {}

@@ -22,7 +22,7 @@ struct Sender : fair::mq::Device
     void InitTask() override
     {
         fIndex = GetConfig()->GetProperty<int>("sender-index");
-        fSubtimeframeSize = GetConfig()->GetProperty<int>("subtimeframe-size");
+        fBufferSize = GetConfig()->GetProperty<int>("buffer-size");
         fNumReceivers = GetConfig()->GetProperty<int>("num-receivers");
     }
 
@@ -34,21 +34,25 @@ struct Sender : fair::mq::Device
             Header h;
             FairMQMessagePtr id(NewMessage());
             if (dataInChannel.Receive(id) > 0) {
-                h.id = *(static_cast<uint16_t*>(id->GetData()));
+                h.id = *(static_cast<uint64_t*>(id->GetData()));
                 h.senderIndex = fIndex;
             } else {
                 continue;
             }
 
-            FairMQParts parts;
-            parts.AddPart(NewSimpleMessage(h));
-            parts.AddPart(NewMessage(fSubtimeframeSize));
+            try {
+                FairMQParts parts;
+                parts.AddPart(NewSimpleMessageFor("data", 0, h));
+                parts.AddPart(NewMessageFor("data", 0, fBufferSize));
 
-            uint64_t currentDataId = h.id;
-            int direction = currentDataId % fNumReceivers;
+                uint64_t currentDataId = h.id;
+                int direction = currentDataId % fNumReceivers;
 
-            if (Send(parts, "data", direction, 0) < 0) {
-                LOG(debug) << "Failed to queue Subtimeframe #" << currentDataId << " to Receiver[" << direction << "]";
+                if (Send(parts, "data", direction, 0) < 0) {
+                    LOG(debug) << "Failed to queue Buffer #" << currentDataId << " to Receiver[" << direction << "]";
+                }
+            } catch (fair::mq::MessageBadAlloc& mba) {
+                LOG(debug) << "shared memory full, retrying";
             }
         }
     }
@@ -56,15 +60,15 @@ struct Sender : fair::mq::Device
   private:
     int fNumReceivers = 0;
     unsigned int fIndex = 0;
-    int fSubtimeframeSize = 10000;
+    int fBufferSize = 10000;
 };
 
 void addCustomOptions(bpo::options_description& options)
 {
     options.add_options()
         ("sender-index", bpo::value<int>()->default_value(0), "Sender Index")
-        ("subtimeframe-size", bpo::value<int>()->default_value(1000), "Subtimeframe size in bytes")
-        ("num-receivers", bpo::value<int>()->required(), "Number of EPNs");
+        ("buffer-size", bpo::value<int>()->default_value(1000), "Buffer size in bytes")
+        ("num-receivers", bpo::value<int>()->required(), "Number of Receivers");
 }
 std::unique_ptr<fair::mq::Device> getDevice(FairMQProgOptions& /* config */)
 {

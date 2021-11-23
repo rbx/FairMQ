@@ -15,10 +15,19 @@ target_link_libraries(fairmq-ex-n-m-sender PRIVATE FairMQ)
 add_executable(fairmq-ex-n-m-receiver receiver.cxx)
 target_link_libraries(fairmq-ex-n-m-receiver PRIVATE FairMQ)
 
-add_custom_target(ExampleNM DEPENDS fairmq-ex-n-m-synchronizer fairmq-ex-n-m-sender fairmq-ex-n-m-receiver)
+add_executable(fairmq-ex-n-m-sink sink.cxx)
+target_link_libraries(fairmq-ex-n-m-sink PRIVATE FairMQ)
+
+add_custom_target(ExampleNM DEPENDS
+  fairmq-ex-n-m-synchronizer
+  fairmq-ex-n-m-sender
+  fairmq-ex-n-m-receiver
+  fairmq-ex-n-m-sink
+)
 
 list(JOIN Boost_LIBRARY_DIRS ":" LIB_DIR)
 set(BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_BINARY_DIR}/fairmq/sdk)
+set(FAIRMQ_BIN_DIR ${CMAKE_BINARY_DIR}/fairmq)
 set(DATA_DIR ${CMAKE_CURRENT_BINARY_DIR})
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ex-n-m-topology.xml                ${CMAKE_CURRENT_BINARY_DIR}/ex-n-m-topology.xml @ONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ex-n-m-pair-topology.xml           ${CMAKE_CURRENT_BINARY_DIR}/ex-n-m-pair-topology.xml @ONLY)
@@ -42,6 +51,7 @@ install(
   fairmq-ex-n-m-synchronizer
   fairmq-ex-n-m-sender
   fairmq-ex-n-m-receiver
+  fairmq-ex-n-m-sink
 
   LIBRARY DESTINATION ${PROJECT_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${PROJECT_INSTALL_BINDIR}
@@ -49,6 +59,7 @@ install(
 
 # configure run script with different executable paths for build and for install directories
 set(BIN_DIR ${CMAKE_INSTALL_PREFIX}/${PROJECT_INSTALL_BINDIR})
+set(FAIRMQ_BIN_DIR ${CMAKE_INSTALL_PREFIX}/${PROJECT_INSTALL_BINDIR}/fairmq)
 set(DATA_DIR ${CMAKE_INSTALL_PREFIX}/${PROJECT_INSTALL_DATADIR})
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ex-n-m-topology.xml                ${CMAKE_CURRENT_BINARY_DIR}/ex-n-m-topology.xml_install @ONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ex-n-m-pair-topology.xml           ${CMAKE_CURRENT_BINARY_DIR}/ex-n-m-pair-topology.xml_install @ONLY)

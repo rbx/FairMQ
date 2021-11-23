@@ -15,7 +15,7 @@ namespace example_n_m
 
 struct Header
 {
-    std::uint16_t id;
+    std::uint64_t id;
     int senderIndex;
 };
 

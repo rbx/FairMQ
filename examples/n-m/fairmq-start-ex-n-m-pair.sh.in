@@ -1,6 +1,7 @@
 #!/bin/bash
 
 export PATH=@BIN_DIR@:$PATH
+export FAIRMQ_PATH=@FAIRMQ_BIN_DIR@
 
 SYNC="fairmq-ex-n-m-synchronizer"
 SYNC+=" --id Sync"
@@ -13,7 +14,7 @@ SENDER0+=" --id Sender1"
 SENDER0+=" --channel-config name=sync,type=sub,method=connect,address=tcp://localhost:8010"
 SENDER0+="                  name=data,type=pair,method=connect,address=tcp://localhost:8021,address=tcp://localhost:8022,address=tcp://localhost:8023,address=tcp://localhost:8024"
 SENDER0+=" --sender-index 0"
-SENDER0+=" --subtimeframe-size 1000000"
+SENDER0+=" --buffer-size 1000000"
 SENDER0+=" --num-receivers 4"
 xterm -geometry 80x25+500+0 -hold -e $SENDER0 &
 
@@ -22,7 +23,7 @@ SENDER1+=" --id Sender2"
 SENDER1+=" --channel-config name=sync,type=sub,method=connect,address=tcp://localhost:8010"
 SENDER1+="                  name=data,type=pair,method=connect,address=tcp://localhost:8031,address=tcp://localhost:8032,address=tcp://localhost:8033,address=tcp://localhost:8034"
 SENDER1+=" --sender-index 1"
-SENDER1+=" --subtimeframe-size 1000000"
+SENDER1+=" --buffer-size 1000000"
 SENDER1+=" --num-receivers 4"
 xterm -geometry 80x25+500+350 -hold -e $SENDER1 &
 
@@ -31,7 +32,7 @@ SENDER2+=" --id Sender3"
 SENDER2+=" --channel-config name=sync,type=sub,method=connect,address=tcp://localhost:8010"
 SENDER2+="                  name=data,type=pair,method=connect,address=tcp://localhost:8041,address=tcp://localhost:8042,address=tcp://localhost:8043,address=tcp://localhost:8044"
 SENDER2+=" --sender-index 2"
-SENDER2+=" --subtimeframe-size 1000000"
+SENDER2+=" --buffer-size 1000000"
 SENDER2+=" --num-receivers 4"
 xterm -geometry 80x25+500+700 -hold -e $SENDER2 &
 
@@ -58,3 +59,9 @@ RECEIVER3+=" --id Receiver4"
 RECEIVER3+=" --channel-config name=data,type=pair,method=bind,address=tcp://localhost:8024,address=tcp://localhost:8034,address=tcp://localhost:8044"
 RECEIVER3+=" --num-senders 3"
 xterm -geometry 80x25+1000+1050 -hold -e $RECEIVER3 &
+
+SINK="fairmq-ex-n-m-sink"
+SINK+=" --id Sink3"
+SINK+=" --severity debug"
+SINK+=" --channel-config name=sink,transport=shmem,type=pull,method=bind,address=ipc://ex_n_m_sink"
+xterm -geometry 80x25+1500+350 -hold -e $SINK &
