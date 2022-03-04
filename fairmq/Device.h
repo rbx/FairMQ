@@ -459,6 +459,9 @@ class Device
     /// Runs the device (to be overloaded in child classes)
     virtual void Run() {}
 
+    /// Draining of the queues, as an alternative to hard stop (to be overloaded in child classes)
+    virtual void Drain() {}
+
     /// Called in the RUNNING state once before executing the Run()/ConditionalRun() method
     virtual void PreRun() {}
 
@@ -583,6 +586,8 @@ class Device
     void InitTaskWrapper();
     /// Handles the Run() method
     void RunWrapper();
+    /// Handles the Drain() method
+    void DrainWrapper();
     /// Handles the ResetTask() method
     void ResetTaskWrapper();
     /// Handles the Reset() method

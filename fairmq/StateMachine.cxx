@@ -54,6 +54,7 @@ struct DEVICE_READY_S        : public state<> { static string Name() { return "D
 struct INITIALIZING_TASK_S   : public state<> { static string Name() { return "INITIALIZING_TASK"; }   static State Type() { return State::InitializingTask; } };
 struct READY_S               : public state<> { static string Name() { return "READY"; }               static State Type() { return State::Ready; } };
 struct RUNNING_S             : public state<> { static string Name() { return "RUNNING"; }             static State Type() { return State::Running; } };
+struct DRAINING_S            : public state<> { static string Name() { return "DRAINING"; }            static State Type() { return State::Draining; } };
 struct RESETTING_TASK_S      : public state<> { static string Name() { return "RESETTING_TASK"; }      static State Type() { return State::ResettingTask; } };
 struct RESETTING_DEVICE_S    : public state<> { static string Name() { return "RESETTING_DEVICE"; }    static State Type() { return State::ResettingDevice; } };
 struct EXITING_S             : public state<> { static string Name() { return "EXITING"; }             static State Type() { return State::Exiting; } };
@@ -68,6 +69,7 @@ struct BIND_E          { static string Name() { return "BIND"; }          static
 struct CONNECT_E       { static string Name() { return "CONNECT"; }       static Transition Type() { return Transition::Connect; } };
 struct INIT_TASK_E     { static string Name() { return "INIT_TASK"; }     static Transition Type() { return Transition::InitTask; } };
 struct RUN_E           { static string Name() { return "RUN"; }           static Transition Type() { return Transition::Run; } };
+struct DRAIN_E         { static string Name() { return "DRAIN"; }         static Transition Type() { return Transition::Drain; } };
 struct STOP_E          { static string Name() { return "STOP"; }          static Transition Type() { return Transition::Stop; } };
 struct RESET_TASK_E    { static string Name() { return "RESET_TASK"; }    static Transition Type() { return Transition::ResetTask; } };
 struct RESET_DEVICE_E  { static string Name() { return "RESET_DEVICE"; }  static Transition Type() { return Transition::ResetDevice; } };
@@ -137,6 +139,9 @@ struct Machine_ : public state_machine_def<Machine_>
         Row<READY_S,               RESET_TASK_E,    RESETTING_TASK_S,      DefaultFct, none>,
 
         Row<RUNNING_S,             STOP_E,          READY_S,               DefaultFct, none>,
+        Row<RUNNING_S,             DRAIN_E,         DRAINING_S,            DefaultFct, none>,
+
+        Row<DRAINING_S,            STOP_E,          READY_S,               DefaultFct, none>,
 
         Row<RESETTING_TASK_S,      AUTO_E,          DEVICE_READY_S,        DefaultFct, none>,
         Row<RESETTING_DEVICE_S,    AUTO_E,          IDLE_S,                DefaultFct, none>,
@@ -272,6 +277,9 @@ try {
                 return fsm->fLastTransitionResult;
             case Transition::Run:
                 fsm->process_event(RUN_E());
+                return fsm->fLastTransitionResult;
+            case Transition::Drain:
+                fsm->process_event(DRAIN_E());
                 return fsm->fLastTransitionResult;
             case Transition::Stop:
                 fsm->process_event(STOP_E());

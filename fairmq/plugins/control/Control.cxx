@@ -181,6 +181,10 @@ try {
                     cout << "\n --> [r] run\n\n" << flush;
                     ChangeDeviceState(DeviceStateTransition::Run);
                 break;
+                case 'w':
+                    cout << "\n --> [r] drain\n\n" << flush;
+                    ChangeDeviceState(DeviceStateTransition::Drain);
+                break;
                 case 's':
                     cout << "\n --> [s] stop\n\n" << flush;
                     ChangeDeviceState(DeviceStateTransition::Stop);
@@ -257,7 +261,7 @@ auto Control::PrintInteractiveHelpColor() -> void
     ss << "Following control commands are available:\n\n"
        << " [\033[01;32mh\033[0m] help, [\033[01;32mc\033[0m] check current device state, [\033[01;32mp\033[0m] print number of connected peers for channels,\n"
        << " [\033[01;32mi\033[0m] init device, [\033[01;32mb\033[0m] bind, [\033[01;32mx\033[0m] connect, [\033[01;32mj\033[0m] init task,"
-       << " [\033[01;32mr\033[0m] run, [\033[01;32ms\033[0m] stop,\n"
+       << " [\033[01;32mr\033[0m] run, [\033[01;32ms\033[0m] stop, [\033[01;32mw\033[0m] drain\n"
        << " [\033[01;32mt\033[0m] reset task, [\033[01;32md\033[0m] reset device, [\033[01;32mq\033[0m] end,\n"
        << " [\033[01;32mk\033[0m] increase log severity, [\033[01;32ml\033[0m] decrease log severity, [\033[01;32mn\033[0m] increase log verbosity, [\033[01;32mm\033[0m] decrease log verbosity\n\n";
     cout << ss.str() << flush;
@@ -269,7 +273,7 @@ auto Control::PrintInteractiveHelp() -> void
     ss << "Following control commands are available:\n\n"
        << " [h] help, [c] check current device state, [p] print number of connected peers for channels\n"
        << " [i] init device, [b] bind, [x] connect, [j] init task,\n"
-       << " [r] run, [s] stop,\n"
+       << " [r] run, [s] stop, [w] drain\n"
        << " [t] reset task, [d] reset device, [q] end,\n"
        << " [k] increase log severity, [l] decrease log severity, [n] increase log verbosity, [m] decrease log verbosity.\n\n";
     cout << ss.str() << flush;

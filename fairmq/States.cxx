@@ -16,7 +16,7 @@ using namespace std;
 namespace fair::mq
 {
 
-const array<string, 16> stateNames =
+const array<string, 17> stateNames =
 {
     {
         "UNDEFINED",
@@ -32,6 +32,7 @@ const array<string, 16> stateNames =
         "INITIALIZING TASK",
         "READY",
         "RUNNING",
+        "DRAINING",
         "RESETTING TASK",
         "RESETTING DEVICE",
         "EXITING"
@@ -53,12 +54,13 @@ const unordered_map<string, State> states =
     { "INITIALIZING TASK",   State::InitializingTask },
     { "READY",               State::Ready },
     { "RUNNING",             State::Running },
+    { "DRAINING",            State::Draining },
     { "RESETTING TASK",      State::ResettingTask },
     { "RESETTING DEVICE",    State::ResettingDevice },
     { "EXITING",             State::Exiting }
 };
 
-const array<string, 12> transitionNames =
+const array<string, 13> transitionNames =
 {
     {
         "AUTO",
@@ -68,6 +70,7 @@ const array<string, 12> transitionNames =
         "CONNECT",
         "INIT TASK",
         "RUN",
+        "DRAIN",
         "STOP",
         "RESET TASK",
         "RESET DEVICE",
@@ -85,6 +88,7 @@ const unordered_map<string, Transition> transitions =
     { "CONNECT",       Transition::Connect },
     { "INIT TASK",     Transition::InitTask },
     { "RUN",           Transition::Run },
+    { "DRAIN",         Transition::Drain },
     { "STOP",          Transition::Stop },
     { "RESET TASK",    Transition::ResetTask },
     { "RESET DEVICE",  Transition::ResetDevice },

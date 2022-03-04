@@ -31,6 +31,7 @@ enum class State : int
     InitializingTask,
     Ready,
     Running,
+    Draining,
     ResettingTask,
     ResettingDevice,
     Exiting
@@ -45,6 +46,7 @@ enum class Transition : int
     Connect,
     InitTask,
     Run,
+    Drain,
     Stop,
     ResetTask,
     ResetDevice,

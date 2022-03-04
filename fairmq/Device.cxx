@@ -120,6 +120,9 @@ Device::Device(ProgOptions* config, tools::Version version)
             case State::Running:
                 RunWrapper();
                 break;
+            case State::Draining:
+                DrainWrapper();
+                break;
             case State::ResettingTask:
                 ResetTaskWrapper();
                 break;
@@ -763,6 +766,20 @@ void Device::UnblockTransports()
 {
     for (auto& transport : fTransports) {
         transport.second->Interrupt();
+    }
+}
+
+void Device::DrainWrapper()
+{
+    for (auto& t : fTransports) {
+        t.second->Resume();
+    }
+
+    Drain();
+
+    if (!NewStatePending()) {
+        UnblockTransports();
+        ChangeState(Transition::Stop);
     }
 }
 
